@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gridiron Strategy - Turn-Based Football</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="game-container">
+        <header>
+            <h1>🏈 Gridiron Strategy</h1>
+            <div class="score-board">
+                <div class="team home">
+                    <span class="team-name">Home</span>
+                    <span class="score" id="home-score">0</span>
+                </div>
+                <div class="game-info">
+                    <div id="quarter">Q1</div>
+                    <div id="down-distance">1st & 10</div>
+                </div>
+                <div class="team away">
+                    <span class="team-name">Away</span>
+                    <span class="score" id="away-score">0</span>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <div class="field-container">
+                <canvas id="field" width="800" height="400"></canvas>
+                <div class="field-marker" id="line-of-scrimmage">Line of Scrimmage</div>
+            </div>
+
+            <div class="controls">
+                <div class="play-selection">
+                    <h3>Select Your Play</h3>
+                    <div class="play-buttons">
+                        <button class="play-btn" data-play="run-left">Run Left</button>
+                        <button class="play-btn" data-play="run-middle">Run Middle</button>
+                        <button class="play-btn" data-play="run-right">Run Right</button>
+                        <button class="play-btn" data-play="pass-short">Short Pass</button>
+                        <button class="play-btn" data-play="pass-medium">Medium Pass</button>
+                        <button class="play-btn" data-play="pass-deep">Deep Pass</button>
+                    </div>
+                </div>
+
+                <div class="action-buttons">
+                    <button id="execute-play" class="btn-primary">Execute Play</button>
+                    <button id="new-game" class="btn-secondary">New Game</button>
+                </div>
+
+                <div class="game-log">
+                    <h3>Play-by-Play</h3>
+                    <div id="log-content">
+                        <p>Welcome to Gridiron Strategy! Select a play to begin.</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
