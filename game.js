@@ -1,3 +1,9 @@
+// Hex Grid Constants
+const HEX_SIZE = 15; // Size of each hexagon
+const FIELD_LENGTH = 120; // 120 yards (100 + 10 yard endzones on each side)
+const FIELD_WIDTH = 53; // Standard football field width in yards
+const ISO_ANGLE = Math.PI / 6; // 30 degrees for isometric view
+
 // Game State
 const gameState = {
     homeScore: 0,
@@ -6,8 +12,69 @@ const gameState = {
     possession: 'home',
     down: 1,
     distance: 10,
-    yardLine: 20,
-    selectedPlay: null
+    ballPosition: { q: 0, r: 20 }, // Hex coordinates (q=horizontal, r=vertical/yards)
+    selectedPlay: null,
+    playerPositions: [] // Will store hex positions of players
+};
+
+// Hex Grid Utilities
+const HexUtils = {
+    // Convert hex axial coordinates to pixel coordinates (isometric)
+    hexToPixel(q, r, offsetX = 0, offsetY = 0) {
+        const x = HEX_SIZE * (Math.sqrt(3) * q + Math.sqrt(3)/2 * r);
+        const y = HEX_SIZE * (3/2 * r);
+
+        // Apply isometric transformation
+        const isoX = (x - y) * Math.cos(ISO_ANGLE);
+        const isoY = (x + y) * Math.sin(ISO_ANGLE);
+
+        return {
+            x: isoX + offsetX,
+            y: isoY + offsetY
+        };
+    },
+
+    // Draw a hexagon at the given hex coordinates
+    drawHex(ctx, q, r, offsetX, offsetY, fillStyle = null, strokeStyle = '#ffffff', lineWidth = 1) {
+        const center = this.hexToPixel(q, r, offsetX, offsetY);
+        const angles = [];
+
+        for (let i = 0; i < 6; i++) {
+            angles.push(Math.PI / 3 * i);
+        }
+
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const angle = angles[i];
+            const x = center.x + HEX_SIZE * Math.cos(angle);
+            const y = center.y + HEX_SIZE * Math.sin(angle) * 0.5; // Flatten for isometric
+
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.closePath();
+
+        if (fillStyle) {
+            ctx.fillStyle = fillStyle;
+            ctx.fill();
+        }
+
+        ctx.strokeStyle = strokeStyle;
+        ctx.lineWidth = lineWidth;
+        ctx.stroke();
+    },
+
+    // Get yard line from r coordinate
+    getYardLine(r) {
+        // Field goes from r=0 (own endzone) to r=120 (opponent endzone)
+        // Yard lines go from 0 to 100
+        if (r < 10) return r; // Own endzone
+        if (r > 110) return 110 - r; // Opponent endzone
+        return r - 10; // Field position
+    }
 };
 
 // DOM Elements
@@ -36,9 +103,10 @@ function initGame() {
     gameState.possession = 'home';
     gameState.down = 1;
     gameState.distance = 10;
-    gameState.yardLine = 20;
+    gameState.ballPosition = { q: 0, r: 30 }; // Start at 20 yard line (10 yard endzone + 20)
     gameState.selectedPlay = null;
-    
+    gameState.playerPositions = [];
+
     updateDisplay();
     logContent.innerHTML = '<p>Welcome to Gridiron Strategy! Select a play to begin.</p>';
     drawField();
@@ -62,29 +130,44 @@ function selectPlay(btn) {
 
 function executePlay() {
     if (!gameState.selectedPlay) return;
-    
+
     const result = calculatePlayResult(gameState.selectedPlay);
     const yards = result.yards;
-    const success = result.success;
-    
-    // Update field position
-    gameState.yardLine += yards;
-    
+
+    // Move ball in hex coordinates (r represents yards down the field)
+    gameState.ballPosition.r += yards;
+
+    // Random lateral movement for variety
+    const lateralMove = Math.floor(Math.random() * 3) - 1; // -1, 0, or 1
+    gameState.ballPosition.q += lateralMove;
+
+    // Keep ball within field bounds (q should stay within reasonable range)
+    gameState.ballPosition.q = Math.max(-8, Math.min(8, gameState.ballPosition.q));
+
     // Check for touchdown
-    if (gameState.yardLine >= 100) {
+    if (gameState.ballPosition.r >= 110) {
         scoreTouchdown();
         return;
     }
-    
+
+    // Check for safety (ball in own endzone)
+    if (gameState.ballPosition.r < 10) {
+        addLog('Safety! Ball went into own endzone.');
+        gameState.ballPosition.r = 30; // Reset to 20 yard line
+        gameState.down = 1;
+        gameState.distance = 10;
+    }
+
     // Check for first down
     if (yards >= gameState.distance) {
         gameState.down = 1;
         gameState.distance = 10;
-        addLog(`First down! Gained ${yards} yards. Ball at ${gameState.yardLine} yard line.`);
+        const yardLine = HexUtils.getYardLine(gameState.ballPosition.r);
+        addLog(`First down! Gained ${yards} yards. Ball at ${yardLine} yard line.`);
     } else {
         gameState.down++;
         gameState.distance -= yards;
-        
+
         if (yards > 0) {
             addLog(`Gained ${yards} yards. ${getDownText()}`);
         } else if (yards < 0) {
@@ -93,16 +176,16 @@ function executePlay() {
             addLog(`No gain. ${getDownText()}`);
         }
     }
-    
+
     // Check for turnover on downs
     if (gameState.down > 4) {
         turnover();
         return;
     }
-    
+
     updateDisplay();
     drawField();
-    
+
     // Reset play selection
     playButtons.forEach(b => b.classList.remove('selected'));
     gameState.selectedPlay = null;
@@ -165,13 +248,13 @@ function scoreTouchdown() {
         gameState.awayScore += 7;
         addLog('🎉 TOUCHDOWN! Away team scores! (+7)');
     }
-    
+
     // Switch possession and reset field position
     gameState.possession = gameState.possession === 'home' ? 'away' : 'home';
-    gameState.yardLine = 20;
+    gameState.ballPosition = { q: 0, r: 30 }; // Reset to 20 yard line
     gameState.down = 1;
     gameState.distance = 10;
-    
+
     updateDisplay();
     drawField();
 }
@@ -179,10 +262,11 @@ function scoreTouchdown() {
 function turnover() {
     addLog(`Turnover on downs! ${gameState.possession === 'home' ? 'Away' : 'Home'} team takes over.`);
     gameState.possession = gameState.possession === 'home' ? 'away' : 'home';
-    gameState.yardLine = 100 - gameState.yardLine; // Flip field position
+    // Flip field position (120 total yards - current position)
+    gameState.ballPosition.r = 120 - gameState.ballPosition.r;
     gameState.down = 1;
     gameState.distance = 10;
-    
+
     updateDisplay();
     drawField();
 }
@@ -214,52 +298,91 @@ function addLog(message) {
 function drawField() {
     const width = canvas.width;
     const height = canvas.height;
-    
+
     // Clear canvas
-    ctx.fillStyle = '#2d5016';
+    ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 0, width, height);
-    
-    // Draw yard lines
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
-    
-    for (let i = 0; i <= 10; i++) {
-        const x = (width / 10) * i;
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, height);
-        ctx.stroke();
-        
-        // Yard markers
-        if (i > 0 && i < 10) {
-            ctx.fillStyle = '#ffffff';
-            ctx.font = '14px Arial';
-            ctx.textAlign = 'center';
-            const yardNum = i * 10;
-            ctx.fillText(yardNum.toString(), x, height / 2);
+
+    // Center the field on canvas
+    const offsetX = width / 2;
+    const offsetY = height / 2;
+
+    // Draw hexagonal grid
+    const gridWidth = 20; // Number of hexes wide (covers ~53 yards)
+    const gridLength = FIELD_LENGTH; // Number of hexes long (120 yards)
+
+    // Calculate starting position to center the grid
+    const startQ = -gridWidth / 2;
+
+    // Draw the hex grid
+    for (let r = 0; r < gridLength; r++) {
+        for (let q = startQ; q < startQ + gridWidth; q++) {
+            // Determine hex color based on field position
+            let hexColor;
+
+            // Endzones
+            if (r < 10) {
+                hexColor = 'rgba(239, 68, 68, 0.3)'; // Home endzone (red)
+            } else if (r >= 110) {
+                hexColor = 'rgba(59, 130, 246, 0.3)'; // Away endzone (blue)
+            } else {
+                // Main field - alternating green shades for grass effect
+                const shade = (q + r) % 2 === 0 ? 0.15 : 0.2;
+                hexColor = `rgba(45, 80, 22, ${shade})`;
+            }
+
+            // Highlight yard line markers every 10 yards
+            if ((r - 10) % 10 === 0 && r >= 10 && r < 110) {
+                hexColor = 'rgba(255, 255, 255, 0.1)';
+            }
+
+            // Draw the hex
+            HexUtils.drawHex(ctx, q, r, offsetX, offsetY, hexColor, 'rgba(255, 255, 255, 0.2)', 0.5);
         }
     }
-    
-    // Draw line of scrimmage
-    const losX = (gameState.yardLine / 100) * width;
-    ctx.strokeStyle = '#fbbf24';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(losX, 0);
-    ctx.lineTo(losX, height);
-    ctx.stroke();
-    
+
+    // Draw yard line numbers
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'center';
+
+    for (let yard = 10; yard <= 100; yard += 10) {
+        const r = yard + 10; // Account for endzone offset
+        const yardDisplay = yard <= 50 ? yard : 100 - yard;
+        const pos = HexUtils.hexToPixel(0, r, offsetX, offsetY);
+        ctx.fillText(yardDisplay.toString(), pos.x, pos.y);
+    }
+
+    // Draw line of scrimmage (highlighted row)
+    const losR = gameState.ballPosition.r;
+    for (let q = startQ; q < startQ + gridWidth; q++) {
+        HexUtils.drawHex(ctx, q, losR, offsetX, offsetY, null, '#fbbf24', 2);
+    }
+
+    // Draw ball at current position
+    const ballPos = HexUtils.hexToPixel(gameState.ballPosition.q, gameState.ballPosition.r, offsetX, offsetY);
+
     // Draw ball
     ctx.fillStyle = '#8b4513';
     ctx.beginPath();
-    ctx.ellipse(losX, height / 2, 15, 10, 0, 0, Math.PI * 2);
+    ctx.ellipse(ballPos.x, ballPos.y, 8, 6, 0, 0, Math.PI * 2);
     ctx.fill();
-    
-    // Draw possession indicator
+    ctx.strokeStyle = '#654321';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Draw possession indicator above ball
     ctx.fillStyle = gameState.possession === 'home' ? '#4ade80' : '#f87171';
-    ctx.font = 'bold 16px Arial';
+    ctx.font = 'bold 10px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText(gameState.possession.toUpperCase(), losX, 30);
+    ctx.fillText(gameState.possession.toUpperCase(), ballPos.x, ballPos.y - 15);
+
+    // Draw field info
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'left';
+    const yardLine = HexUtils.getYardLine(gameState.ballPosition.r);
+    ctx.fillText(`Ball at ${yardLine} yard line (Hex: ${gameState.ballPosition.q}, ${gameState.ballPosition.r})`, 10, 20);
 }
 
 // Initial execution disabled
