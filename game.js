@@ -14,7 +14,8 @@ const gameState = {
     distance: 10,
     ballPosition: { q: 0, r: 20 }, // Hex coordinates (q=horizontal, r=vertical/yards)
     selectedPlay: null,
-    playerPositions: [] // Will store hex positions of players
+    playerPositions: [], // Will store hex positions of players
+    camera: { x: 0, y: 0 } // Camera offset for scrolling
 };
 
 // Hex Grid Utilities
@@ -116,9 +117,37 @@ function setupEventListeners() {
     playButtons.forEach(btn => {
         btn.addEventListener('click', () => selectPlay(btn));
     });
-    
+
     executePlayBtn.addEventListener('click', executePlay);
     newGameBtn.addEventListener('click', initGame);
+
+    // Keyboard controls for camera scrolling
+    document.addEventListener('keydown', (e) => {
+        const scrollSpeed = 20; // Pixels per keypress
+
+        switch(e.key) {
+            case 'ArrowUp':
+                e.preventDefault();
+                gameState.camera.y += scrollSpeed;
+                drawField();
+                break;
+            case 'ArrowDown':
+                e.preventDefault();
+                gameState.camera.y -= scrollSpeed;
+                drawField();
+                break;
+            case 'ArrowLeft':
+                e.preventDefault();
+                gameState.camera.x += scrollSpeed;
+                drawField();
+                break;
+            case 'ArrowRight':
+                e.preventDefault();
+                gameState.camera.x -= scrollSpeed;
+                drawField();
+                break;
+        }
+    });
 }
 
 function selectPlay(btn) {
@@ -303,9 +332,9 @@ function drawField() {
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 0, width, height);
 
-    // Center the field on canvas
-    const offsetX = width / 2;
-    const offsetY = height / 2;
+    // Center the field on canvas with camera offset
+    const offsetX = width / 2 + gameState.camera.x;
+    const offsetY = height / 2 + gameState.camera.y;
 
     // Draw hexagonal grid
     const gridWidth = 20; // Number of hexes wide (covers ~53 yards)
@@ -383,6 +412,11 @@ function drawField() {
     ctx.textAlign = 'left';
     const yardLine = HexUtils.getYardLine(gameState.ballPosition.r);
     ctx.fillText(`Ball at ${yardLine} yard line (Hex: ${gameState.ballPosition.q}, ${gameState.ballPosition.r})`, 10, 20);
+
+    // Draw camera controls hint
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.font = '11px Arial';
+    ctx.fillText('Use Arrow Keys to scroll', 10, height - 10);
 }
 
 // Initial execution disabled
