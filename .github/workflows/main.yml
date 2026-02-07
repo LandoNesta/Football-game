@@ -1,0 +1,80 @@
+name: Deploy Game to GitHub Pages
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  # Build job - runs tests and prepares files
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate HTML
+        run: |
+          echo "Checking HTML files..."
+          if [ -f index.html ]; then
+            echo "✓ index.html found"
+          else
+            echo "✗ index.html missing"
+            exit 1
+          fi
+
+      - name: Validate CSS
+        run: |
+          echo "Checking CSS files..."
+          if [ -f styles.css ]; then
+            echo "✓ styles.css found"
+          else
+            echo "✗ styles.css missing"
+            exit 1
+          fi
+
+      - name: Validate JavaScript
+        run: |
+          echo "Checking JavaScript files..."
+          if [ -f game.js ]; then
+            echo "✓ game.js found"
+          else
+            echo "✗ game.js missing"
+            exit 1
+          fi
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+  # Deploy job - deploys to GitHub Pages
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
